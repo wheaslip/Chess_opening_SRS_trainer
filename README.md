@@ -10,9 +10,11 @@ A private, local-first chess opening trainer with spaced repetition. Record your
 - Teach, Learn, Practice, and Library views
 - Automatic opponent replies during reviews
 - Immediate move feedback and a wooden move sound generated in the browser
+- A deeper, distinct wooden sound for captures
 - SRS intervals of 1, 3, 7, 14, 30, 60, and 120 days
 - Failed lines drop one SRS level and return later in the same session
 - All repertoire and review data stays in the browser's local storage
+- JSON backup and restore, including moves, SRS levels, review timestamps, and due dates
 - Responsive layout for desktop and smaller screens
 
 ## Run locally
@@ -25,6 +27,10 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Double-click launcher on Windows
+
+Double-click **Start Repertoire.cmd** in the project folder. It starts the local server in the background, waits for it to be ready, and opens the trainer in your default browser. Running the launcher again simply opens the existing server.
 
 For a production-style local run:
 
@@ -44,6 +50,8 @@ pnpm start
 ## Data and privacy
 
 This app has no accounts, analytics, remote database, or cloud sync. Data is stored under the key `repertoire-opening-lines-v1` in the browser profile used to open the app. Clearing site data for localhost will erase the repertoire.
+
+Use **Library → Export backup** to download a complete JSON backup. **Import backup** replaces the current browser repertoire after confirmation and restores the saved SRS levels and due dates.
 
 ## Development
 

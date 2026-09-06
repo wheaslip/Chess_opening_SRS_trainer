@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
+  Download,
   FlipVertical2,
   GraduationCap,
   Library,
@@ -20,6 +21,7 @@ import {
   Trash2,
   Trophy,
   Undo2,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -72,7 +74,7 @@ function randomize<T>(items: T[]) {
   return copy;
 }
 
-function playWoodenThunk() {
+function playWoodenThunk(capture = false) {
   if (typeof window === 'undefined') return;
   const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtx) return;
@@ -81,27 +83,28 @@ function playWoodenThunk() {
   const gain = ctx.createGain();
   const oscillator = ctx.createOscillator();
   const filter = ctx.createBiquadFilter();
-  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.055), ctx.sampleRate);
+  const duration = capture ? 0.105 : 0.055;
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.6);
   const noise = ctx.createBufferSource();
   noise.buffer = buffer;
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(720, now);
+  filter.frequency.setValueAtTime(capture ? 520 : 720, now);
   oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(155, now);
-  oscillator.frequency.exponentialRampToValueAtTime(74, now + 0.08);
+  oscillator.frequency.setValueAtTime(capture ? 108 : 155, now);
+  oscillator.frequency.exponentialRampToValueAtTime(capture ? 48 : 74, now + (capture ? 0.14 : 0.08));
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.006);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+  gain.gain.exponentialRampToValueAtTime(capture ? 0.3 : 0.22, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + (capture ? 0.17 : 0.11));
   noise.connect(filter).connect(gain);
   oscillator.connect(gain);
   gain.connect(ctx.destination);
   noise.start(now);
   oscillator.start(now);
-  noise.stop(now + 0.07);
-  oscillator.stop(now + 0.11);
-  window.setTimeout(() => void ctx.close(), 220);
+  noise.stop(now + (capture ? 0.12 : 0.07));
+  oscillator.stop(now + (capture ? 0.17 : 0.11));
+  window.setTimeout(() => void ctx.close(), capture ? 290 : 220);
 }
 
 export default function Home() {
@@ -125,6 +128,7 @@ export default function Home() {
   const [sessionMistakes, setSessionMistakes] = useState(0);
   const gameRef = useRef(new Chess());
   const linesRef = useRef(lines);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -265,7 +269,7 @@ export default function Home() {
       setFen(game.fen());
       setLastMove({ from: move.from, to: move.to });
       setSelectedSquare(null);
-      playWoodenThunk();
+      playWoodenThunk(Boolean(move.captured));
       return true;
     }
 
@@ -278,7 +282,7 @@ export default function Home() {
         setLocked(true);
         setFeedback('wrong');
         setSessionMistakes((count) => count + 1);
-        playWoodenThunk();
+        playWoodenThunk(Boolean(move.captured));
         if (mode === 'practice') {
           setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), dueAt: Date.now(), lastReviewedAt: Date.now() } : line));
         }
@@ -289,7 +293,7 @@ export default function Home() {
       setFen(game.fen());
       setLastMove({ from: move.from, to: move.to });
       setSelectedSquare(null);
-      playWoodenThunk();
+      playWoodenThunk(Boolean(move.captured));
       const nextIndex = moveIndex + 1;
       setMoveIndex(nextIndex);
       if (nextIndex >= activeLine.moves.length) finishLine(activeLine);
@@ -312,7 +316,7 @@ export default function Home() {
         advanceLine(true);
         return;
       }
-      playWoodenThunk();
+      playWoodenThunk(Boolean(move.captured));
       setFen(gameRef.current.fen());
       setLastMove({ from: move.from, to: move.to });
       const nextIndex = moveIndex + 1;
@@ -399,6 +403,40 @@ export default function Home() {
   const addToSrs = (id: string) => {
     setLines((current) => current.map((line) => line.id === id ? { ...line, inSrs: true, level: 0, dueAt: Date.now() } : line));
     toast.add({ title: 'Added to SRS', description: 'This line is ready to practice now.', type: 'success' });
+  };
+
+  const exportBackup = () => {
+    const payload = {
+      app: 'Repertoire',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      lines,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `repertoire-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.add({ title: 'Backup exported', description: `${lines.length} ${lines.length === 1 ? 'line' : 'lines'}, including all SRS progress.`, type: 'success' });
+  };
+
+  const importBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const payload = JSON.parse(await file.text()) as { app?: unknown; version?: unknown; lines?: unknown };
+      if (payload.app !== 'Repertoire' || payload.version !== 1 || !Array.isArray(payload.lines) || !payload.lines.every(isOpeningLine)) throw new Error('Invalid backup');
+      const replacement = payload.lines as OpeningLine[];
+      const confirmed = window.confirm(`Replace your current ${lines.length} ${lines.length === 1 ? 'line' : 'lines'} with the ${replacement.length} ${replacement.length === 1 ? 'line' : 'lines'} in this backup? SRS levels and due dates will also be restored.`);
+      if (!confirmed) return;
+      setLines(replacement);
+      toast.add({ title: 'Backup restored', description: `${replacement.length} ${replacement.length === 1 ? 'line' : 'lines'} and all SRS progress imported.`, type: 'success' });
+    } catch {
+      toast.add({ title: 'Could not import this backup', description: 'Choose a JSON backup exported by Repertoire.', type: 'error' });
+    }
   };
 
   const canDragPiece = ({ piece }: { piece: { pieceType: string } }) => {
@@ -500,7 +538,19 @@ export default function Home() {
         )}
 
         {mode === 'library' && (
-      <section className="collection-view"><div className="collection-heading"><div><span className="eyebrow">LIBRARY</span><h2>Your opening lines</h2><p>Everything stays in this browser on this computer.</p></div><Button onClick={startTeach}><Plus /> New line</Button></div>{lines.length ? <div className="line-list">{lines.map((line) => <article className="line-card" key={line.id}><div className="card-top"><span className={`side-badge ${line.side}`}>{line.side === 'white' ? '♔' : '♚'} {line.side}</span><span className={line.inSrs ? 'srs-badge active' : 'srs-badge'}>{formatDue(line, now)}</span></div><h3>{line.name}</h3><p>{lineNotation(line)}</p><div><span>{line.moves.length} moves · Level {line.level}</span><span className="card-actions">{!line.inSrs && <Button variant="outline" onClick={() => addToSrs(line.id)}>Add to SRS</Button>}<Button variant="ghost" size="icon" aria-label={`Delete ${line.name}`} onClick={() => { if (window.confirm(`Delete “${line.name}”?`)) setLines((current) => current.filter((item) => item.id !== line.id)); }}><Trash2 /></Button></span></div></article>)}</div> : <EmptyCollection title="Your library is empty" copy="Teach your first opening line to begin." action={startTeach} />}</section>
+          <section className="collection-view">
+            <div className="collection-heading">
+              <div><span className="eyebrow">LIBRARY</span><h2>Your opening lines</h2><p>Everything stays in this browser on this computer.</p></div>
+              <div className="collection-actions">
+                <input ref={backupInputRef} className="backup-input" type="file" accept="application/json,.json" onChange={importBackup} />
+                <Button variant="outline" onClick={() => backupInputRef.current?.click()}><Upload /> Import backup</Button>
+                <Button variant="outline" onClick={exportBackup}><Download /> Export backup</Button>
+                <Button onClick={startTeach}><Plus /> New line</Button>
+              </div>
+            </div>
+            <p className="backup-note">Backups include every move, current SRS level, review history, and due date.</p>
+            {lines.length ? <div className="line-list">{lines.map((line) => <article className="line-card" key={line.id}><div className="card-top"><span className={`side-badge ${line.side}`}>{line.side === 'white' ? '♔' : '♚'} {line.side}</span><span className={line.inSrs ? 'srs-badge active' : 'srs-badge'}>{formatDue(line, now)}</span></div><h3>{line.name}</h3><p>{lineNotation(line)}</p><div><span>{line.moves.length} moves · Level {line.level}</span><span className="card-actions">{!line.inSrs && <Button variant="outline" onClick={() => addToSrs(line.id)}>Add to SRS</Button>}<Button variant="ghost" size="icon" aria-label={`Delete ${line.name}`} onClick={() => { if (window.confirm(`Delete “${line.name}”?`)) setLines((current) => current.filter((item) => item.id !== line.id)); }}><Trash2 /></Button></span></div></article>)}</div> : <EmptyCollection title="Your library is empty" copy="Teach your first opening line to begin." action={startTeach} />}
+          </section>
         )}
 
         {mode === 'complete' && <section className="complete-view"><span className="trophy-ring"><Trophy /></span><span className="eyebrow">SESSION COMPLETE</span><h2>Nicely played.</h2><p>{sessionCorrect} {sessionCorrect === 1 ? 'line' : 'lines'} completed with {sessionMistakes} {sessionMistakes === 1 ? 'retry' : 'retries'}.</p><Button onClick={goHome}>Back to today <ChevronRight /></Button></section>}
@@ -522,4 +572,19 @@ export default function Home() {
 
 function EmptyCollection({ title, copy, action }: { title: string; copy: string; action: () => void }) {
   return <div className="empty-collection"><span>♞</span><h3>{title}</h3><p>{copy}</p><Button onClick={action}><Plus /> Teach a line</Button></div>;
+}
+
+function isOpeningLine(value: unknown): value is OpeningLine {
+  if (!value || typeof value !== 'object') return false;
+  const line = value as Partial<OpeningLine>;
+  return typeof line.id === 'string'
+    && typeof line.name === 'string'
+    && (line.side === 'white' || line.side === 'black')
+    && Array.isArray(line.moves)
+    && line.moves.length > 0
+    && line.moves.every((move) => move && typeof move.from === 'string' && typeof move.to === 'string' && typeof move.san === 'string')
+    && typeof line.createdAt === 'number'
+    && typeof line.inSrs === 'boolean'
+    && typeof line.level === 'number'
+    && (line.dueAt === null || typeof line.dueAt === 'number');
 }
