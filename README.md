@@ -7,12 +7,14 @@ A private, local-first chess opening trainer with spaced repetition. Record your
 - Full chess move validation powered by `chess.js`
 - Standard draggable chess pieces with click-to-move support
 - Board flipping in Teach mode; the bottom side becomes your practice side
+- Side-aware duplicate protection for newly taught lines
 - Teach, Learn, Practice, and Library views
 - Automatic opponent replies during reviews
 - Immediate move feedback and a wooden move sound generated in the browser
 - A deeper, distinct wooden sound for captures
 - SRS intervals of 1, 3, 7, 14, 30, 60, and 120 days
 - Failed lines drop one SRS level and return later in the same session
+- Mistake review shows the correct move and waits for confirmation before continuing
 - All repertoire and review data stays in the browser's local storage
 - JSON backup and restore, including moves, SRS levels, review timestamps, and due dates
 - Responsive layout for desktop and smaller screens

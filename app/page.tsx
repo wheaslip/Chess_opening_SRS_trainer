@@ -117,6 +117,8 @@ export default function Home() {
   const [recordedMoves, setRecordedMoves] = useState<RecordedMove[]>([]);
   const [lineName, setLineName] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateName, setDuplicateName] = useState('');
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
@@ -173,6 +175,7 @@ export default function Home() {
     setLocked(false);
     setActiveLineId(null);
     setSessionQueue([]);
+    setDuplicateOpen(false);
     resetBoard();
   }, [resetBoard]);
 
@@ -279,15 +282,15 @@ export default function Home() {
       if (!matches) {
         game.undo();
         setFen(game.fen());
+        setSelectedSquare(null);
         setLocked(true);
         setFeedback('wrong');
         setSessionMistakes((count) => count + 1);
         playWoodenThunk(Boolean(move.captured));
         if (mode === 'practice') {
-          setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), dueAt: Date.now(), lastReviewedAt: Date.now() } : line));
+          setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), lastReviewedAt: Date.now() } : line));
         }
-        toast.add({ title: 'Not this move', description: `The line continues with ${expected?.san ?? 'another move'}. It will return in this session.`, type: 'error' });
-        window.setTimeout(() => advanceLine(false), 950);
+        toast.add({ title: 'Not this move', description: `Review the correct move below the board, then continue.`, type: 'error' });
         return false;
       }
       setFen(game.fen());
@@ -301,7 +304,7 @@ export default function Home() {
     }
     game.undo();
     return false;
-  }, [mode, activeLine, moveIndex, locked, advanceLine, finishLine]);
+  }, [mode, activeLine, moveIndex, locked, finishLine]);
 
   useEffect(() => {
     if ((mode !== 'practice' && mode !== 'learn') || !activeLine || locked) return;
@@ -343,6 +346,13 @@ export default function Home() {
       styles[lastMove.from] = { background: 'rgba(221, 190, 85, .52)' };
       styles[lastMove.to] = { background: 'rgba(221, 190, 85, .62)' };
     }
+    if (feedback === 'wrong' && activeLine) {
+      const expected = activeLine.moves[moveIndex];
+      if (expected) {
+        styles[expected.from] = { background: 'rgba(214, 165, 69, .72)', boxShadow: 'inset 0 0 0 4px rgba(109, 67, 24, .42)' };
+        styles[expected.to] = { background: 'rgba(214, 165, 69, .82)', boxShadow: 'inset 0 0 0 4px rgba(109, 67, 24, .52)' };
+      }
+    }
     if (selectedSquare) {
       styles[selectedSquare] = { background: 'rgba(255, 215, 86, .75)' };
       for (const move of styleGame.moves({ square: selectedSquare as Square, verbose: true })) {
@@ -350,7 +360,7 @@ export default function Home() {
       }
     }
     return styles;
-  }, [selectedSquare, lastMove, fen]);
+  }, [selectedSquare, lastMove, fen, feedback, activeLine, moveIndex]);
 
   const undoTeachMove = () => {
     const move = gameRef.current.undo();
@@ -362,6 +372,13 @@ export default function Home() {
   };
 
   const saveLine = (inSrs: boolean) => {
+    const duplicate = lines.find((line) => line.side === orientation && line.moves.length === recordedMoves.length && line.moves.every((move, index) => sameMove(move, recordedMoves[index])));
+    if (duplicate) {
+      setSaveOpen(false);
+      setDuplicateName(duplicate.name);
+      setDuplicateOpen(true);
+      return;
+    }
     const created: OpeningLine = {
       id: crypto.randomUUID(),
       name: lineName.trim() || `Opening line ${lines.length + 1}`,
@@ -370,7 +387,7 @@ export default function Home() {
       createdAt: Date.now(),
       inSrs,
       level: 0,
-      dueAt: inSrs ? Date.now() : null,
+      dueAt: inSrs ? now : null,
     };
     setLines((current) => [...current, created]);
     setSaveOpen(false);
@@ -401,7 +418,7 @@ export default function Home() {
   };
 
   const addToSrs = (id: string) => {
-    setLines((current) => current.map((line) => line.id === id ? { ...line, inSrs: true, level: 0, dueAt: Date.now() } : line));
+    setLines((current) => current.map((line) => line.id === id ? { ...line, inSrs: true, level: 0, dueAt: now } : line));
     toast.add({ title: 'Added to SRS', description: 'This line is ready to practice now.', type: 'success' });
   };
 
@@ -458,6 +475,7 @@ export default function Home() {
     onPieceDrop: ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => tryMove(sourceSquare, targetSquare),
     onSquareClick,
     squareStyles,
+    arrows: feedback === 'wrong' && activeLine?.moves[moveIndex] ? [{ startSquare: activeLine.moves[moveIndex].from, endSquare: activeLine.moves[moveIndex].to, color: 'rgba(176, 112, 37, .82)' }] : [],
     animationDurationInMs: 180,
     boardStyle: { borderRadius: '3px' },
     darkSquareStyle: { backgroundColor: '#936f4d' },
@@ -521,11 +539,11 @@ export default function Home() {
           <section className={`trainer-view ${feedback ? `feedback-${feedback}` : ''}`}>
             <div className="board-panel">
               <div className="view-heading mobile-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : 'PRACTICE'}</span><h2>{activeLine.name}</h2></div>
-              <div className="board-shell"><div className="board-frame"><Chessboard options={boardOptions} /></div>{feedback && <div className="feedback-overlay">{feedback === 'correct' ? <><span className="feedback-icon"><Check /></span><strong>Line complete</strong><small>{mode === 'learn' ? 'Added to your SRS' : 'Scheduled further out'}</small></> : <><span className="feedback-icon"><CircleAlert /></span><strong>Try this one again</strong><small>It&apos;s back in this session</small></>}</div>}</div>
+              <div className="board-shell"><div className="board-frame"><Chessboard options={boardOptions} /></div>{feedback === 'correct' && <div className="feedback-overlay"><span className="feedback-icon"><Check /></span><strong>Line complete</strong><small>{mode === 'learn' ? 'Added to your SRS' : 'Scheduled further out'}</small></div>}</div>
+              {feedback === 'wrong' && <output className="mistake-review" aria-live="assertive"><span className="mistake-icon"><CircleAlert /></span><div><small>Correct move</small><strong>{activeLine.moves[moveIndex]?.san}</strong><span>{activeLine.moves[moveIndex]?.from} → {activeLine.moves[moveIndex]?.to}</span></div><Button onClick={() => advanceLine(false)}>Continue <ChevronRight /></Button></output>}
             </div>
             <aside className="session-panel">
               <div className="view-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : 'PRACTICE'}</span><h2>{activeLine.name}</h2><p>Find the next move as {activeLine.side}. Your opponent replies automatically.</p></div>
-              <div className="session-progress"><div><span>Line progress</span><strong>{moveIndex} / {activeLine.moves.length}</strong></div><div className="progress-track"><span style={{ width: `${Math.round((moveIndex / activeLine.moves.length) * 100)}%` }} /></div></div>
               <div className="move-sheet compact"><div className="move-sheet-head"><span>Moves played</span><span>{sessionQueue.length} left</span></div><div className="moves-grid muted-moves">{activeLine.moves.slice(0, moveIndex).map((move, index) => <span key={`${move.from}-${index}`}><small>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : '…'}</small>{move.san}</span>)}</div></div>
               <div className="session-score"><span><Check /> {sessionCorrect} complete</span><span><RotateCcw /> {sessionMistakes} retries</span></div>
               <button className="cancel-action" onClick={goHome}><ArrowLeft /> End session</button>
@@ -565,6 +583,13 @@ export default function Home() {
           <DialogFooter className="save-actions"><Button variant="outline" onClick={() => saveLine(false)}><Clock3 /> Save for later</Button><Button onClick={() => saveLine(true)}><Brain /> Add to SRS now</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
+        <DialogContent className="save-dialog">
+          <DialogHeader><DialogTitle>This line is already saved</DialogTitle><DialogDescription>The exact same sequence already exists from the {orientation} viewpoint as “{duplicateName}”. No duplicate was added.</DialogDescription></DialogHeader>
+          <div className="duplicate-summary"><span className={`piece-chip ${orientation === 'white' ? 'white-piece' : 'black-piece'}`}>{orientation === 'white' ? '♔' : '♚'}</span><span><strong>{duplicateName}</strong><small>{recordedMoves.length} matching moves</small></span></div>
+          <DialogFooter><Button variant="outline" onClick={() => setDuplicateOpen(false)}>Keep editing</Button><Button onClick={() => { setDuplicateOpen(false); setMode('library'); }}>Go to library</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Toaster />
     </main>
   );
@@ -587,4 +612,8 @@ function isOpeningLine(value: unknown): value is OpeningLine {
     && typeof line.inSrs === 'boolean'
     && typeof line.level === 'number'
     && (line.dueAt === null || typeof line.dueAt === 'number');
+}
+
+function sameMove(left: RecordedMove, right: RecordedMove) {
+  return left.from === right.from && left.to === right.to && (left.promotion ?? '') === (right.promotion ?? '');
 }
