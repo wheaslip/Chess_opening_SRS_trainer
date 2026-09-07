@@ -10,13 +10,17 @@ A private, local-first chess opening trainer with spaced repetition. Record your
 - Side-aware duplicate protection for newly taught lines
 - Teach, Learn, Practice, and Library views
 - Automatic opponent replies during reviews
+- Premoves during review sessions
 - Immediate move feedback and a wooden move sound generated in the browser
 - A deeper, distinct wooden sound for captures
-- SRS intervals of 1, 3, 7, 14, 30, 60, and 120 days
+- SRS intervals of 12 hours, 2.5, 6.5, 13.5, 29.5, 59.5, and 119.5 days
 - Failed lines drop one SRS level and return later in the same session
 - Mistake review shows the correct move and waits for confirmation before continuing
 - All repertoire and review data stays in the browser's local storage
 - JSON backup and restore, including moves, SRS levels, review timestamps, and due dates
+- Five selectable move sounds, five selectable capture sounds, and dark mode
+- A next-review summary on the home screen
+- Optional schedule-neutral bonus reviews of lines missed in the completed session
 - Responsive layout for desktop and smaller screens
 
 ## Run locally
