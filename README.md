@@ -20,7 +20,7 @@ A private, local-first chess opening trainer with spaced repetition. Record your
 - JSON backup and restore, including moves, SRS levels, review timestamps, and due dates
 - Five selectable move sounds, five selectable capture sounds, and dark mode
 - A next-review summary on the home screen
-- Optional schedule-neutral bonus reviews of lines missed in the completed session
+- Optional schedule-neutral bonus reviews that repeat missed lines until a round is completed without errors
 - Responsive layout for desktop and smaller screens
 
 ## Run locally

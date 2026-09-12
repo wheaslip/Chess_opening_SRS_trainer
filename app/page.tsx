@@ -382,8 +382,10 @@ export default function Home() {
         setFeedback('wrong');
         setSessionMistakes((count) => count + 1);
         playSelectedSound(Boolean(move.captured));
-        if (mode === 'practice' && !isBonusSession) {
-          setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), lastReviewedAt: Date.now() } : line));
+        if (mode === 'practice') {
+          if (!isBonusSession) {
+            setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), lastReviewedAt: Date.now() } : line));
+          }
           setFailedLineIds((current) => current.includes(activeLine.id) ? current : [...current, activeLine.id]);
         }
         toast.add({ title: 'Not this move', description: `Review the correct move below the board, then continue.`, type: 'error' });
@@ -520,7 +522,7 @@ export default function Home() {
     setMoveIndex(0);
     setSessionCorrect(0);
     setSessionMistakes(0);
-    if (!bonus) setFailedLineIds([]);
+    setFailedLineIds([]);
     setIsBonusSession(bonus);
     setMode(nextMode);
     setLocked(false);
@@ -711,7 +713,7 @@ export default function Home() {
           </section>
         )}
 
-        {mode === 'complete' && <section className="complete-view"><span className="trophy-ring">{isBonusSession ? <Sparkles /> : <Trophy />}</span><span className="eyebrow">{isBonusSession ? 'BONUS COMPLETE' : 'SESSION COMPLETE'}</span><h2>{isBonusSession ? 'Extra work, well done.' : 'Nicely played.'}</h2><p>{sessionCorrect} {sessionCorrect === 1 ? 'line' : 'lines'} completed with {sessionMistakes} {sessionMistakes === 1 ? 'retry' : 'retries'}.</p>{!isBonusSession && failedLineIds.length > 0 ? <div className="complete-actions"><Button size="lg" onClick={() => beginSession(failedLineIds, 'practice', true)}><Sparkles /> Bonus review missed lines</Button><Button variant="outline" onClick={goHome}>Back to today</Button><small>Bonus review will not affect SRS levels or due dates.</small></div> : <Button onClick={goHome}>Back to today <ChevronRight /></Button>}</section>}
+        {mode === 'complete' && <section className="complete-view"><span className="trophy-ring">{isBonusSession ? <Sparkles /> : <Trophy />}</span><span className="eyebrow">{isBonusSession ? 'BONUS COMPLETE' : 'SESSION COMPLETE'}</span><h2>{isBonusSession ? failedLineIds.length > 0 ? 'Ready for another round?' : 'Extra work, well done.' : 'Nicely played.'}</h2><p>{sessionCorrect} {sessionCorrect === 1 ? 'line' : 'lines'} completed with {sessionMistakes} {sessionMistakes === 1 ? 'retry' : 'retries'}.</p>{failedLineIds.length > 0 ? <div className="complete-actions"><Button size="lg" onClick={() => beginSession(failedLineIds, 'practice', true)}><Sparkles /> {isBonusSession ? 'Review missed lines again' : 'Bonus review missed lines'}</Button><Button variant="outline" onClick={goHome}>Back to today</Button><small>Bonus review will not affect SRS levels or due dates.</small></div> : <Button onClick={goHome}>Back to today <ChevronRight /></Button>}</section>}
       </div>
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
