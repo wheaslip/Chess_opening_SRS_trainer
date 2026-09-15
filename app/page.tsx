@@ -127,6 +127,12 @@ function randomize<T>(items: T[]) {
   return copy;
 }
 
+function insertAtRandom<T>(items: T[], item: T) {
+  const copy = [...items];
+  copy.splice(Math.floor(Math.random() * (copy.length + 1)), 0, item);
+  return copy;
+}
+
 function playWoodenThunk(capture = false, profileIndex = 0) {
   if (typeof window === 'undefined') return;
   const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -186,6 +192,9 @@ export default function Home() {
   const [sessionMistakes, setSessionMistakes] = useState(0);
   const [failedLineIds, setFailedLineIds] = useState<string[]>([]);
   const [isBonusSession, setIsBonusSession] = useState(false);
+  const [attemptHadRetry, setAttemptHadRetry] = useState(false);
+  const [isExtraPractice, setIsExtraPractice] = useState(false);
+  const [completionShouldRequeue, setCompletionShouldRequeue] = useState(false);
   const [premove, setPremove] = useState<{ from: string; to: string } | null>(null);
   const gameRef = useRef(new Chess());
   const linesRef = useRef(lines);
@@ -258,6 +267,9 @@ export default function Home() {
     setSessionQueue([]);
     setFailedLineIds([]);
     setIsBonusSession(false);
+    setAttemptHadRetry(false);
+    setIsExtraPractice(false);
+    setCompletionShouldRequeue(false);
     setDuplicateOpen(false);
     resetBoard();
   }, [resetBoard]);
@@ -303,9 +315,12 @@ export default function Home() {
   const advanceLine = useCallback((succeeded: boolean) => {
     setFeedback(null);
     setLocked(false);
+    setAttemptHadRetry(false);
+    setIsExtraPractice(false);
+    setCompletionShouldRequeue(false);
     setSessionQueue((current) => {
       const [, ...remaining] = current;
-      const nextQueue = succeeded ? remaining : [...remaining, current[0]];
+      const nextQueue = succeeded || !current[0] ? remaining : insertAtRandom(remaining, current[0]);
       if (nextQueue.length === 0) {
         setMode('complete');
         setActiveLineId(null);
@@ -320,11 +335,51 @@ export default function Home() {
     });
   }, []);
 
+  const resetLineToMove = useCallback((line: OpeningLine, index: number) => {
+    const game = new Chess();
+    let lastReplay: { from: string; to: string } | null = null;
+    for (const savedMove of line.moves.slice(0, index)) {
+      const replayed = game.move({ from: savedMove.from, to: savedMove.to, promotion: savedMove.promotion });
+      lastReplay = { from: replayed.from, to: replayed.to };
+    }
+    gameRef.current = game;
+    setFen(game.fen());
+    setMoveIndex(index);
+    setLastMove(lastReplay);
+    setSelectedSquare(null);
+    setPremove(null);
+    setFeedback(null);
+    setLocked(false);
+  }, []);
+
+  const retryMistake = useCallback(() => {
+    if (!activeLine) return;
+    setAttemptHadRetry(true);
+    resetLineToMove(activeLine, moveIndex);
+  }, [activeLine, moveIndex, resetLineToMove]);
+
+  const practiceCompletedLineAgain = useCallback(() => {
+    if (!activeLine) return;
+    setIsExtraPractice(true);
+    setAttemptHadRetry(false);
+    resetLineToMove(activeLine, 0);
+  }, [activeLine, resetLineToMove]);
+
+  const continueAfterCompletion = useCallback(() => {
+    advanceLine(!completionShouldRequeue);
+  }, [advanceLine, completionShouldRequeue]);
+
+  const stopExtraPractice = useCallback(() => {
+    setFeedback('correct');
+    setLocked(true);
+  }, []);
+
   const finishLine = useCallback((line: OpeningLine) => {
     setLocked(true);
     setFeedback('correct');
-    setSessionCorrect((count) => count + 1);
-    if (!isBonusSession) {
+    if (!isExtraPractice && !attemptHadRetry) setSessionCorrect((count) => count + 1);
+    if (!isExtraPractice) setCompletionShouldRequeue(attemptHadRetry);
+    if (!isBonusSession && !isExtraPractice && !attemptHadRetry) {
       const nextLevel = Math.min(SRS_HOURS.length - 1, mode === 'learn' ? 1 : line.level + 1);
       setLines((current) => current.map((item) => item.id === line.id ? {
         ...item,
@@ -334,8 +389,7 @@ export default function Home() {
         lastReviewedAt: Date.now(),
       } : item));
     }
-    window.setTimeout(() => advanceLine(true), 850);
-  }, [mode, advanceLine, isBonusSession]);
+  }, [mode, isBonusSession, isExtraPractice, attemptHadRetry]);
 
   const tryMove = useCallback((sourceSquare: string, targetSquare: string | null) => {
     if (!targetSquare || locked) return false;
@@ -382,8 +436,8 @@ export default function Home() {
         setFeedback('wrong');
         setSessionMistakes((count) => count + 1);
         playSelectedSound(Boolean(move.captured));
-        if (mode === 'practice') {
-          if (!isBonusSession) {
+        if (mode === 'practice' && !isExtraPractice) {
+          if (!isBonusSession && !attemptHadRetry) {
             setLines((current) => current.map((line) => line.id === activeLine.id ? { ...line, level: Math.max(0, line.level - 1), lastReviewedAt: Date.now() } : line));
           }
           setFailedLineIds((current) => current.includes(activeLine.id) ? current : [...current, activeLine.id]);
@@ -402,7 +456,7 @@ export default function Home() {
     }
     game.undo();
     return false;
-  }, [mode, activeLine, moveIndex, locked, finishLine, playSelectedSound, isBonusSession]);
+  }, [mode, activeLine, moveIndex, locked, finishLine, playSelectedSound, isBonusSession, isExtraPractice, attemptHadRetry]);
 
   useEffect(() => {
     if ((mode !== 'practice' && mode !== 'learn') || !activeLine || locked) return;
@@ -524,6 +578,9 @@ export default function Home() {
     setSessionMistakes(0);
     setFailedLineIds([]);
     setIsBonusSession(bonus);
+    setAttemptHadRetry(false);
+    setIsExtraPractice(false);
+    setCompletionShouldRequeue(false);
     setMode(nextMode);
     setLocked(false);
   };
@@ -669,11 +726,12 @@ export default function Home() {
           <section className={`trainer-view ${feedback ? `feedback-${feedback}` : ''}`}>
             <div className="board-panel">
               <div className="view-heading mobile-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : isBonusSession ? 'BONUS REVIEW' : 'PRACTICE'}</span><h2>{activeLine.name}</h2></div>
-              <div className="board-shell"><div className="board-frame"><Chessboard options={boardOptions} /></div>{feedback === 'correct' && <div className="feedback-overlay"><span className="feedback-icon"><Check /></span><strong>Line complete</strong><small>{mode === 'learn' ? 'Added to your SRS' : isBonusSession ? 'Schedule unchanged' : 'Scheduled further out'}</small></div>}</div>
-              {feedback === 'wrong' && <output className="mistake-review" aria-live="assertive"><span className="mistake-icon"><CircleAlert /></span><div><small>Correct move</small><strong>{activeLine.moves[moveIndex]?.san}</strong><span>{activeLine.moves[moveIndex]?.from} → {activeLine.moves[moveIndex]?.to}</span></div><Button onClick={() => advanceLine(false)}>Continue <ChevronRight /></Button></output>}
+              <div className="board-shell"><div className="board-frame"><Chessboard options={boardOptions} /></div>{feedback === 'correct' && <div className="feedback-overlay"><span className="feedback-icon"><Check /></span><strong>Line complete</strong><small>{isExtraPractice ? 'Schedule unchanged' : completionShouldRequeue ? 'Practice complete · queued again' : isBonusSession ? 'Schedule unchanged' : mode === 'learn' ? 'Added to your SRS' : 'Scheduled further out'}</small></div>}</div>
+              {feedback === 'wrong' && <output className="mistake-review" aria-live="assertive"><span className="mistake-icon"><CircleAlert /></span><div><small>Correct move</small><strong>{activeLine.moves[moveIndex]?.san}</strong><span>{activeLine.moves[moveIndex]?.from} → {activeLine.moves[moveIndex]?.to}</span></div><span className="mistake-actions"><Button onClick={retryMistake}><RotateCcw /> Try again</Button><Button variant="outline" onClick={isExtraPractice ? stopExtraPractice : () => advanceLine(false)}>{isExtraPractice ? 'Stop extra practice' : 'Move on'} <ChevronRight /></Button></span></output>}
+              {feedback === 'correct' && <div className="line-complete-actions"><Button onClick={practiceCompletedLineAgain}><RotateCcw /> Practice again</Button><Button variant="outline" onClick={continueAfterCompletion}>{sessionQueue.length > 1 || completionShouldRequeue ? 'Next line' : 'Finish session'} <ChevronRight /></Button><small>Extra practice does not affect this line’s SRS schedule or queue status.</small></div>}
             </div>
             <aside className="session-panel">
-              <div className="view-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : isBonusSession ? 'BONUS REVIEW' : 'PRACTICE'}</span><h2>{activeLine.name}</h2><p>{isBonusSession ? 'Practice the missed line again. This bonus round will not change its schedule.' : `Find the next move as ${activeLine.side}. Your opponent replies automatically.`}</p></div>
+              <div className="view-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : isBonusSession ? 'BONUS REVIEW' : 'PRACTICE'}</span><h2>{activeLine.name}</h2><p>{isExtraPractice ? 'Extra practice only. This attempt will not change the schedule or queue.' : isBonusSession ? 'Practice the missed line again. This bonus round will not change its schedule.' : `Find the next move as ${activeLine.side}. Your opponent replies automatically.`}</p></div>
               <div className="move-sheet compact"><div className="move-sheet-head"><span>Moves played</span><span>{sessionQueue.length} left</span></div><div className="moves-grid muted-moves">{activeLine.moves.slice(0, moveIndex).map((move, index) => <span key={`${move.from}-${index}`}><small>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : '…'}</small>{move.san}</span>)}</div></div>
               <div className="session-score"><span><Check /> {sessionCorrect} complete</span><span><RotateCcw /> {sessionMistakes} retries</span></div>
               <button className="cancel-action" onClick={goHome}><ArrowLeft /> End session</button>
