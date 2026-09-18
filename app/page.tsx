@@ -244,6 +244,9 @@ export default function Home() {
   const dueBlack = lines.filter((line) => line.inSrs && line.side === 'black' && (line.dueAt ?? 0) <= now).length;
   const storedLines = lines.filter((line) => !line.inSrs);
   const activeLines = lines.filter((line) => line.inSrs).length;
+  const showSessionDue = (mode === 'practice' || mode === 'learn') && activeLine !== null;
+  // The completed line stays in the queue until Continue, including during extra practice.
+  const sessionDue = Math.max(0, sessionQueue.length - ((feedback === 'correct' || isExtraPractice) && !completionShouldRequeue ? 1 : 0));
   const nextWhiteAt = lines.filter((line) => line.inSrs && line.side === 'white' && line.dueAt !== null).reduce<number | null>((earliest, line) => earliest === null || (line.dueAt as number) < earliest ? line.dueAt : earliest, null);
   const nextBlackAt = lines.filter((line) => line.inSrs && line.side === 'black' && line.dueAt !== null).reduce<number | null>((earliest, line) => earliest === null || (line.dueAt as number) < earliest ? line.dueAt : earliest, null);
 
@@ -682,6 +685,7 @@ export default function Home() {
             <button className={`nav-item ${mode === 'settings' ? 'active' : ''}`} onClick={() => setMode('settings')}><Settings /> Settings</button>
           </nav>
           <div className="sidebar-summary"><div><span>Due</span><strong>{dueWhite + dueBlack}</strong></div><div><span>Learning</span><strong>{activeLines}</strong></div></div>
+          {showSessionDue && <div className="playing-as" aria-live="polite"><span>Session due</span><strong>{sessionDue}</strong></div>}
         </aside>
 
         {mode === 'home' && (
@@ -732,7 +736,8 @@ export default function Home() {
             </div>
             <aside className="session-panel">
               <div className="view-heading"><span className="eyebrow">{mode === 'learn' ? 'LEARN MODE' : isBonusSession ? 'BONUS REVIEW' : 'PRACTICE'}</span><h2>{activeLine.name}</h2><p>{isExtraPractice ? 'Extra practice only. This attempt will not change the schedule or queue.' : isBonusSession ? 'Practice the missed line again. This bonus round will not change its schedule.' : `Find the next move as ${activeLine.side}. Your opponent replies automatically.`}</p></div>
-              <div className="move-sheet compact"><div className="move-sheet-head"><span>Moves played</span><span>{sessionQueue.length} left</span></div><div className="moves-grid muted-moves">{activeLine.moves.slice(0, moveIndex).map((move, index) => <span key={`${move.from}-${index}`}><small>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : '…'}</small>{move.san}</span>)}</div></div>
+              <div className="playing-as" aria-live="polite"><span>Session due</span><strong>{sessionDue}</strong></div>
+              <div className="move-sheet compact"><div className="move-sheet-head"><span>Moves played</span></div><div className="moves-grid muted-moves">{activeLine.moves.slice(0, moveIndex).map((move, index) => <span key={`${move.from}-${index}`}><small>{index % 2 === 0 ? `${Math.floor(index / 2) + 1}.` : '…'}</small>{move.san}</span>)}</div></div>
               <div className="session-score"><span><Check /> {sessionCorrect} complete</span><span><RotateCcw /> {sessionMistakes} retries</span></div>
               <button className="cancel-action" onClick={goHome}><ArrowLeft /> End session</button>
             </aside>

@@ -197,7 +197,7 @@ h3 { font-size:1.05rem; }
   .sidebar nav { display:grid; grid-template-columns:repeat(5,1fr); }
   .nav-item { min-height:52px; padding:5px; flex-direction:column; gap:2px; justify-content:center; font-size:.68rem; }
   .nav-item svg { width:19px; }
-  .nav-count,.sidebar-summary { display:none; }
+  .nav-count,.sidebar-summary,.sidebar .playing-as { display:none; }
   .home-view { padding:27px 19px; gap:28px; }
   .home-copy>p { margin:15px 0 21px; }
   .home-board-wrap { order:-1; }
