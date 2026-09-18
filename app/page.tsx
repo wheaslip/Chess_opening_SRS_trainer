@@ -244,6 +244,9 @@ export default function Home() {
   const dueBlack = lines.filter((line) => line.inSrs && line.side === 'black' && (line.dueAt ?? 0) <= now).length;
   const storedLines = lines.filter((line) => !line.inSrs);
   const activeLines = lines.filter((line) => line.inSrs).length;
+  const next24Hours = now + 24 * 3_600_000;
+  const reviewsNext24White = lines.filter((line) => line.inSrs && line.side === 'white' && line.dueAt !== null && line.dueAt <= next24Hours).length;
+  const reviewsNext24Black = lines.filter((line) => line.inSrs && line.side === 'black' && line.dueAt !== null && line.dueAt <= next24Hours).length;
   const showSessionDue = (mode === 'practice' || mode === 'learn') && activeLine !== null;
   // The completed line stays in the queue until Continue, including during extra practice.
   const sessionDue = Math.max(0, sessionQueue.length - ((feedback === 'correct' || isExtraPractice) && !completionShouldRequeue ? 1 : 0));
@@ -760,6 +763,12 @@ export default function Home() {
               </div>
             </div>
             <p className="backup-note">Backups include every move, current SRS level, review history, and due date.</p>
+            <div className="next-review-card library-review-summary">
+              <div className="next-review-title"><Clock3 /><strong>Reviews due in the next 24 hours</strong></div>
+              <div><span><i className="mini-piece light">♔</i> White</span><strong>{reviewsNext24White}</strong></div>
+              <div><span><i className="mini-piece dark-piece">♚</i> Black</span><strong>{reviewsNext24Black}</strong></div>
+              <p>Includes reviews already due.</p>
+            </div>
             {lines.length ? <div className="line-list">{lines.map((line) => <article className="line-card" key={line.id}><div className="card-top"><span className={`side-badge ${line.side}`}>{line.side === 'white' ? '♔' : '♚'} {line.side}</span><span className={line.inSrs ? 'srs-badge active' : 'srs-badge'}>{formatDue(line, now)}</span></div><h3>{line.name}</h3><p>{lineNotation(line)}</p><div><span>{line.moves.length} moves · Level {line.level}</span><span className="card-actions">{!line.inSrs && <Button variant="outline" onClick={() => addToSrs(line.id)}>Add to SRS</Button>}<Button variant="ghost" size="icon" aria-label={`Delete ${line.name}`} onClick={() => { if (window.confirm(`Delete “${line.name}”?`)) setLines((current) => current.filter((item) => item.id !== line.id)); }}><Trash2 /></Button></span></div></article>)}</div> : <EmptyCollection title="Your library is empty" copy="Teach your first opening line to begin." action={startTeach} />}
           </section>
         )}
